@@ -8,7 +8,7 @@ using namespace erocket::constants::vehicle;
 class VehicleConstants {
 public:
     double mass_of_system_;
-    double length_of_pendulum_;
+    double lever_arm_;
     double gravitational_acceleration_;
     double moment_of_inertia_;
 
@@ -32,13 +32,13 @@ public:
         }
         RCLCPP_INFO(this->logger_, "Mass of system: %f", mass_of_system_);
 
-        node->declare_parameter<double>(LENGTH_OF_PENDULUM);
-        length_of_pendulum_ = node->get_parameter(LENGTH_OF_PENDULUM).as_double();
-        if (length_of_pendulum_ <= 0.0f || std::isnan(length_of_pendulum_)) {
-            RCLCPP_ERROR(this->logger_, "Could not read length of pendulum correctly.");
-            throw std::runtime_error("Length of pendulum invalid");
+        node->declare_parameter<double>(LEVER_ARM);
+        lever_arm_ = node->get_parameter(LEVER_ARM).as_double();
+        if (lever_arm_ <= 0.0f || std::isnan(lever_arm_)) {
+            RCLCPP_ERROR(this->logger_, "Could not read lever arm correctly.");
+            throw std::runtime_error("Lever arm invalid");
         }
-        RCLCPP_INFO(this->logger_, "Length of pendulum: %f", length_of_pendulum_);
+        RCLCPP_INFO(this->logger_, "Lever arm: %f", lever_arm_);
 
         node->declare_parameter<double>(GRAVITATIONAL_ACCELERATION);
         gravitational_acceleration_ = node->get_parameter(GRAVITATIONAL_ACCELERATION).as_double();

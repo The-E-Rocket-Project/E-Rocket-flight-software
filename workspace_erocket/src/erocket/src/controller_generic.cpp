@@ -17,17 +17,17 @@ using namespace geometry_msgs::msg;
 using namespace erocket::msg;
 using namespace erocket::constants;
 using namespace erocket::constants::setpoint;
-using namespace erocket::constants::controller;
+using namespace erocket::constants::controller_generic;
 using namespace erocket::constants::flight_mode;
 using namespace erocket::frame_transforms;
 
 /**
  * @brief Node that runs the controller for a 1-degree-of-freedom system
  */
-class BaselinePIDController : public rclcpp::Node
+class GenericControllerNode : public rclcpp::Node
 {
 public:
-	explicit BaselinePIDController() : Node("baseline_pid_controller"),
+	explicit GenericControllerNode() : Node("generic_controller"),
     qos_profile_{rmw_qos_profile_sensor_data},
     qos_{rclcpp::QoS(rclcpp::QoSInitialization(qos_profile_.history, 5), qos_profile_)},
 
@@ -35,7 +35,7 @@ public:
     state_aggregator_{std::make_unique<StateAggregator>(this, qos_)},
     setpoint_aggregator_{std::make_unique<SetpointAggregator>(this, qos_)},
     allocator_{std::make_unique<Allocator>(this, qos_, vehicle_constants_)},
-    generic_controller_{this, qos_, state_aggregator_, setpoint_aggregator_, vehicle_constants_, 1.0 / 50.0},
+    generic_controller_{this, qos_, state_aggregator_, setpoint_aggregator_, vehicle_constants_},
 
     flight_mode_{FlightMode::INIT},
     flight_mode_get_subscriber_{this->create_subscription<FlightMode>(
@@ -45,13 +45,13 @@ public:
         }
     )}
     {
-        auto controller_freq = 50.0;
+        double controller_freq = this->get_parameter(CONTROLLER_GENERIC_FREQUENCY_HERTZ_PARAM).as_double();
         double controller_period = 1.0 / controller_freq;
 
         // Controller timer at fixed frequency of controller
         controller_timer_ = this->create_wall_timer(
             std::chrono::duration<double>(controller_period), 
-            std::bind(&BaselinePIDController::controller_callback, this)
+            std::bind(&GenericControllerNode::controller_callback, this)
         );
 	}
 
@@ -78,54 +78,53 @@ private:
 /**
  * @brief Callback function for the controller
  */
-void BaselinePIDController::controller_callback()
+void GenericControllerNode::controller_callback()
 {
-    if (flight_mode_ == FlightMode::ARM) {
+    if (flight_mode_ < FlightMode::ARM) {
+        allocator_->compute_allocation_neutral();
+        return;
+    }
+
+    else if (flight_mode_ == FlightMode::ARM) {
         static rclcpp::Time t0 = this->get_clock()->now();
         rclcpp::Time now = this->get_clock()->now();
 
-        double inner_servo_tilt_angle_radians = 0.0;
-        double outer_servo_tilt_angle_radians = 0.0;
-
         if (now - t0 < 3.0s) {
-            inner_servo_tilt_angle_radians = sin(2.0 * M_PI * (now - t0).seconds()) * degrees_to_radians(30.0);
-            outer_servo_tilt_angle_radians = sin(2.0 * M_PI * (now - t0).seconds() + M_PI_2) * degrees_to_radians(30.0);
-        }
+            auto max_servo_tilt_angle_radians = degrees_to_radians(vehicle_constants_->servo_max_tilt_angle_degrees_);
+            auto inner_servo_tilt_angle_radians = sin(2.0 * M_PI * (now - t0).seconds()) * max_servo_tilt_angle_radians;
+            auto outer_servo_tilt_angle_radians = sin(2.0 * M_PI * (now - t0).seconds() + M_PI_2) * max_servo_tilt_angle_radians;
 
-        allocator_->compute_servo_allocation({
-            inner_servo_tilt_angle_radians,
-            outer_servo_tilt_angle_radians
-        });
+            allocator_->indirect_actuation(
+                inner_servo_tilt_angle_radians,
+                outer_servo_tilt_angle_radians
+            );
+        }
 
         if (now - t0 > 4.0s) {
-            double delta_motor_pwm = 0.0f;
-            double average_motor_thrust_newtons = allocator_->motor_thrust_curve_pwm_to_newtons(0.0f);
-
             // Allocate motor thrust based on the computed torque
-            allocator_->compute_motor_allocation({
-                delta_motor_pwm, 
-                average_motor_thrust_newtons
-            });
+            allocator_->indirect_actuation(
+                0.0f,
+                0.0f,
+                0.0f,
+                0.0f
+            );
         }
+        return;
     }
 
     // only run controller when in mission
     else if (flight_mode_ == FlightMode::TAKE_OFF || flight_mode_ == FlightMode::IN_MISSION || flight_mode_ == FlightMode::LANDING) {
-        auto output = generic_controller_.compute();
-
-        allocator_->compute_servo_allocation({
-            output.first.inner_servo_tilt_angle_radians,
-            output.first.outer_servo_tilt_angle_radians
-        });
-
-        // Allocate motor thrust based on the computed torque
-        allocator_->compute_motor_allocation({
-            output.second.delta_motor_pwm, 
-            output.second.average_motor_thrust_newtons
-        });
+        auto allocator_input = generic_controller_.compute();
+        allocator_->compute_allocation(allocator_input);
+        return;
     }
 
-    // TODO: if FlightMode::MISSION_COMPLETE => slow descent - keep algorithms running, thrust -> hover thrust * 0.9 for 1s => hover thrust
+    else if (flight_mode_ == FlightMode::ABORT) {
+        allocator_->compute_allocation_neutral();
+
+        rclcpp::shutdown();
+        return;
+    }
 }
 
 int main(int argc, char *argv[])
@@ -133,7 +132,7 @@ int main(int argc, char *argv[])
 	std::cout << "Starting offboard baseline pid controller node..." << std::endl;
 	setvbuf(stdout, NULL, _IONBF, BUFSIZ);
 	rclcpp::init(argc, argv);
-	rclcpp::spin(std::make_shared<BaselinePIDController>());
+	rclcpp::spin(std::make_shared<GenericControllerNode>());
 
 	rclcpp::shutdown();
 	return 0;

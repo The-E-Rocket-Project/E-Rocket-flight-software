@@ -7,7 +7,7 @@ namespace constants
 {
 
     constexpr char MASS_OF_SYSTEM[]             = "offboard.mass_of_system";
-    constexpr char LENGTH_OF_PENDULUM[]         = "offboard.length_of_pendulum";
+    constexpr char LEVER_ARM[]                  = "offboard.lever_arm";
     constexpr char GRAVITATIONAL_ACCELERATION[] = "offboard.gravitational_acceleration";
     constexpr char MOMENT_OF_INERTIA[]          = "offboard.moment_of_inertia";
 
@@ -57,8 +57,12 @@ namespace controller
     constexpr char CONTROLLER_POSITION_MIN_OUTPUT_PARAM[] = "offboard.controller.position.gains.min_output";
     constexpr char CONTROLLER_POSITION_MAX_OUTPUT_PARAM[] = "offboard.controller.position.gains.max_output";
     constexpr char CONTROLLER_POSITION_FREQUENCY_HERTZ_PARAM[] = "offboard.controller.position.frequency_hertz";
-
 } // namespace controller
+
+namespace controller_generic
+{
+    constexpr char CONTROLLER_GENERIC_FREQUENCY_HERTZ_PARAM[] = "offboard.controller.generic.frequency_hertz";
+} // namespace controller_generic
 
 namespace flight_mode
 {

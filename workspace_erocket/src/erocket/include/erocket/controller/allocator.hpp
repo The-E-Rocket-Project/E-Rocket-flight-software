@@ -20,16 +20,6 @@ struct AllocatorInput {
     double tau_delta_bar;
 };
 
-struct ServoAllocatorInput {
-    double inner_servo_tilt_angle_radians; 
-    double outer_servo_tilt_angle_radians;
-};
-
-struct MotorAllocatorInput {
-    double delta_motor_pwm;
-    double average_motor_thrust_newtons;
-};
-
 struct AllocatorOutput {
     double inner_servo_pwm;
     double outer_servo_pwm;
@@ -99,25 +89,22 @@ public:
         publish_allocator_debug();
     }
 
-    void compute_servo_allocation(ServoAllocatorInput input) {
-        double inner_servo_pwm = servo_curve_tilt_radians_to_pwm(input.inner_servo_tilt_angle_radians);
-        double outer_servo_pwm = servo_curve_tilt_radians_to_pwm(input.outer_servo_tilt_angle_radians);
-
-        output_.inner_servo_pwm = limit_range_servo_pwm(inner_servo_pwm);
-        output_.outer_servo_pwm = limit_range_servo_pwm(outer_servo_pwm);
+    void indirect_actuation(
+        double inner_servo_tilt_angle_radians = 0.0f, 
+        double outer_servo_tilt_angle_radians = 0.0f, 
+        double upwards_motor_thrust_pwm = NAN,
+        double downwards_motor_thrust_pwm = NAN
+    ) {
+        output_.inner_servo_pwm = limit_range_servo_pwm(
+            servo_curve_tilt_radians_to_pwm(inner_servo_tilt_angle_radians)
+        );
+        output_.outer_servo_pwm = limit_range_servo_pwm(
+            servo_curve_tilt_radians_to_pwm(outer_servo_tilt_angle_radians)
+        );
+        output_.upwards_motor_pwm = limit_range_motor_pwm(upwards_motor_thrust_pwm);
+        output_.downwards_motor_pwm = limit_range_motor_pwm(downwards_motor_thrust_pwm);
 
         publish_servo_pwm();
-        publish_allocator_debug();
-    }
-
-    void compute_motor_allocation(MotorAllocatorInput input) {
-        double average_motor_pwm = motor_thrust_curve_newtons_to_pwm(input.average_motor_thrust_newtons);
-        double upwards_motor_pwm = average_motor_pwm + input.delta_motor_pwm / 2.0f;
-        double downwards_motor_pwm = average_motor_pwm - input.delta_motor_pwm / 2.0f;
-
-        output_.upwards_motor_pwm = limit_range_motor_pwm(upwards_motor_pwm);
-        output_.downwards_motor_pwm = limit_range_motor_pwm(downwards_motor_pwm);
-
         publish_motor_pwm();
         publish_allocator_debug();
     }

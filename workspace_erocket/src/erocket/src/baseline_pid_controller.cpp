@@ -94,28 +94,25 @@ void BaselinePIDController::controller_callback()
         static rclcpp::Time t0 = this->get_clock()->now();
         rclcpp::Time now = this->get_clock()->now();
 
-        double inner_servo_tilt_angle_radians = 0.0;
-        double outer_servo_tilt_angle_radians = 0.0;
-
         if (now - t0 < 3.0s) {
-            inner_servo_tilt_angle_radians = sin(2.0 * M_PI * (now - t0).seconds()) * degrees_to_radians(30.0);
-            outer_servo_tilt_angle_radians = sin(2.0 * M_PI * (now - t0).seconds() + M_PI_2) * degrees_to_radians(30.0);
+            auto max_servo_tilt_angle_radians = degrees_to_radians(vehicle_constants_->servo_max_tilt_angle_degrees_);
+            auto inner_servo_tilt_angle_radians = sin(2.0 * M_PI * (now - t0).seconds()) * max_servo_tilt_angle_radians;
+            auto outer_servo_tilt_angle_radians = sin(2.0 * M_PI * (now - t0).seconds() + M_PI_2) * max_servo_tilt_angle_radians;
+
+            allocator_->indirect_actuation(
+                inner_servo_tilt_angle_radians,
+                outer_servo_tilt_angle_radians
+            );
         }
 
-        allocator_->compute_servo_allocation({
-            inner_servo_tilt_angle_radians,
-            outer_servo_tilt_angle_radians
-        });
-
         if (now - t0 > 4.0s) {
-            double delta_motor_pwm = 0.0f;
-            double average_motor_thrust_newtons = allocator_->motor_thrust_curve_pwm_to_newtons(0.0f);
-
             // Allocate motor thrust based on the computed torque
-            allocator_->compute_motor_allocation({
-                delta_motor_pwm, 
-                average_motor_thrust_newtons
-            });
+            allocator_->indirect_actuation(
+                0.0f,
+                0.0f,
+                0.0f,
+                0.0f
+            );
         }
         return;
     }
@@ -139,15 +136,7 @@ void BaselinePIDController::controller_callback()
     }
 
     else if (flight_mode_ == FlightMode::ABORT) {
-        allocator_->compute_servo_allocation({
-            0.0,
-            0.0
-        });
-
-        allocator_->compute_motor_allocation({
-            0.0, 
-            NAN
-        });
+        allocator_->compute_allocation_neutral();
 
         rclcpp::shutdown();
         return;

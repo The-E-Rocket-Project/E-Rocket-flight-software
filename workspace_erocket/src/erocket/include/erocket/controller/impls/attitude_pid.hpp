@@ -94,8 +94,8 @@ public:
             }
         }
 
-        output_.thrust_vector[0] =   (vehicle_constants_->moment_of_inertia_ / vehicle_constants_->length_of_pendulum_) * tau_bar_[1];
-        output_.thrust_vector[1] = - (vehicle_constants_->moment_of_inertia_ / vehicle_constants_->length_of_pendulum_) * tau_bar_[0];
+        output_.thrust_vector[0] =   (vehicle_constants_->moment_of_inertia_ / vehicle_constants_->lever_arm_) * tau_bar_[1];
+        output_.thrust_vector[1] = - (vehicle_constants_->moment_of_inertia_ / vehicle_constants_->lever_arm_) * tau_bar_[0];
         output_.thrust_vector[2] = u3;
 
         output_.tau_delta_bar = tau_bar_[2];

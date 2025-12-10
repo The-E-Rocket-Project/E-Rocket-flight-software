@@ -2,7 +2,7 @@
   ros__parameters:
     offboard:
       mass_of_system: 1.6
-      length_of_pendulum: 0.2
+      lever_arm: 0.27
       gravitational_acceleration: 9.81
       moment_of_inertia: 0.375
       vehicle:
@@ -37,6 +37,8 @@
             k_ff: [1.0, 1.0, 1.0]   # Feedforward gain
             min_output: [-20., -20., -20.] # Minimum output of each PID
             max_output: [ 20.,  20.,  20.]
+        generic:
+          frequency_hertz: 100.
       mission:
         trajectory_setpoint:
           active: true
