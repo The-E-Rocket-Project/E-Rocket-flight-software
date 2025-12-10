@@ -19,8 +19,6 @@ public:
                 if (msg->manual_lockdown) {
                     emergency_switch_on_ = true;
                     RCLCPP_WARN(logger_, "Emergency switch is ON!");
-                } else {
-                    RCLCPP_INFO(logger_, "Emergency switch is OFF.");
                 }
             }
         )}

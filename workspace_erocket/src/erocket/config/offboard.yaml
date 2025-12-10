@@ -9,20 +9,24 @@
         servo_active: true
         motor_active: true
         servo_max_tilt_angle_degrees: 30.
-        default_motor_pwm: 0.45 # active when position controllers are off
+        default_motor_pwm: 0.40 # active when position controllers are off
         motor_max_pwm: 0.8
         motor_thrust_curve: # newtons = (pwm * m + b) / 1000 * g;
           m: 2696.6
           b: -38.95
+        delta_torque: # tau_delta_bar =  a * delta_M + b * M_bar + c
+          a: 27.631
+          b: 1.4667
+          c: -0.702
       controller:
         attitude:
           active: [true, true, true]
           frequency_hertz: 50.
           gains:
             #   Roll, Pitch, Yaw
-            k_p: [0.7, 0.7, 0.4]
-            k_d: [0.4, 0.4, 0.2]
-            k_i: [.0, .0, 0.1]
+            k_p: [5.0, 5.0, 5.0]
+            k_d: [2.0, 2.0, 2.0]
+            k_i: [0.0, 0.0, 0.5]
         position: 
           active: true
           frequency_hertz: 50.

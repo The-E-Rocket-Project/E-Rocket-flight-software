@@ -66,6 +66,7 @@ public:
     }
 
     void compute_allocation(AllocatorInput input) {
+        input_ = input;
         thrust_ = input.thrust_vector.norm();
         M_bar_ = motor_thrust_curve_newtons_to_pwm(thrust_);
         M_delta_ = delta_torque_curve(M_bar_, input.tau_delta_bar);
@@ -111,8 +112,8 @@ public:
 
     void compute_motor_allocation(MotorAllocatorInput input) {
         double average_motor_pwm = motor_thrust_curve_newtons_to_pwm(input.average_motor_thrust_newtons);
-        double upwards_motor_pwm = average_motor_pwm - input.delta_motor_pwm / 2.0f;
-        double downwards_motor_pwm = average_motor_pwm + input.delta_motor_pwm / 2.0f;
+        double upwards_motor_pwm = average_motor_pwm + input.delta_motor_pwm / 2.0f;
+        double downwards_motor_pwm = average_motor_pwm - input.delta_motor_pwm / 2.0f;
 
         output_.upwards_motor_pwm = limit_range_motor_pwm(upwards_motor_pwm);
         output_.downwards_motor_pwm = limit_range_motor_pwm(downwards_motor_pwm);
@@ -146,8 +147,8 @@ private:
     double thrust_;
     double M_bar_;
     double M_delta_;
-    double gamma_inner_;
-    double gamma_outer_;
+    double gamma_inner_ = 0.0f;
+    double gamma_outer_ = 0.0f;
 
 	rclcpp::Publisher<ActuatorServos>::SharedPtr    servo_tilt_angle_publisher_;
     rclcpp::Publisher<ActuatorMotors>::SharedPtr    motor_thrust_publisher_;

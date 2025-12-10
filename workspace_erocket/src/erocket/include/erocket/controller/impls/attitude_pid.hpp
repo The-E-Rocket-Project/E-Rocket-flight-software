@@ -76,15 +76,15 @@ public:
         Eigen::Vector3d attitude = state.euler_angles;
         attitude[2] -= origin_yaw_;
 
-        Eigen::Vector3d error_p = attitude - setpoint.attitude;
+        Eigen::Vector3d error_p = setpoint.attitude - attitude;
 
         // Update the integrated error
         integrated_error_ += error_p * dt_; 
 
         // Compute PD terms
-        Eigen::Vector3d p_term = k_p_.cwiseProduct(error_p);
-        Eigen::Vector3d d_term = k_d_.cwiseProduct(state.angular_rate);
-        Eigen::Vector3d i_term = k_i_.cwiseProduct(integrated_error_);
+        Eigen::Vector3d p_term =  k_p_.cwiseProduct(error_p);
+        Eigen::Vector3d d_term = -k_d_.cwiseProduct(state.angular_rate);
+        Eigen::Vector3d i_term =  k_i_.cwiseProduct(integrated_error_);
         tau_bar_ = p_term + d_term + i_term;
 
         // Apply controller active flags
