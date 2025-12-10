@@ -1,14 +1,12 @@
-# E-Rocket Repository
+# E-Rocket Flight Software
 
-This repository contains the code and documentation for the E-Rocket project. 
+This repository contains the code and documentation for the E-Rocket flight software. 
 
 ## Table of Contents
 
 - [Project Overview](#project-overview)
 - [Getting Started](#getting-started)
 - [Repository Structure](#repository-structure)
-- [Contributing](#contributing)
-- [License](#license)
 
 ## Project Overview
 
@@ -68,11 +66,3 @@ E-Rocket
 - `mocap_interface` & `mocap_interface`: These packages were adapted from the [Pegasus project](https://github.com/PegasusResearch/pegasus).
 - `px4_msgs`: This package was sourced from [official Repository](https://github.com/PX4/px4_msgs).
 - `px4_msgs`: This package was sourced from [official Repository](https://github.com/PX4/px4_ros_com).
-
-## Contributing
-
-The E-Rocket project is not open for contributions. However, if you have suggestions or improvements, feel free to open an issue.
-
-## License
-
-TODO
