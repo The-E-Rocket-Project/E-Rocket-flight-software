@@ -94,26 +94,30 @@ void BaselinePIDController::controller_callback()
         static rclcpp::Time t0 = this->get_clock()->now();
         rclcpp::Time now = this->get_clock()->now();
 
+        auto inner_servo_tilt_angle_radians = 0.0f;
+        auto outer_servo_tilt_angle_radians = 0.0f;
+        auto upwards_motor_thrust_pwm = NAN;
+        auto downwards_motor_thrust_pwm = NAN;
+
         if (now - t0 < 3.0s) {
             auto max_servo_tilt_angle_radians = degrees_to_radians(vehicle_constants_->servo_max_tilt_angle_degrees_);
-            auto inner_servo_tilt_angle_radians = sin(2.0 * M_PI * (now - t0).seconds()) * max_servo_tilt_angle_radians;
-            auto outer_servo_tilt_angle_radians = sin(2.0 * M_PI * (now - t0).seconds() + M_PI_2) * max_servo_tilt_angle_radians;
+            inner_servo_tilt_angle_radians = sin(2.0 * M_PI * (now - t0).seconds()) * max_servo_tilt_angle_radians;
+            outer_servo_tilt_angle_radians = sin(2.0 * M_PI * (now - t0).seconds() + M_PI_2) * max_servo_tilt_angle_radians;
 
-            allocator_->indirect_actuation(
-                inner_servo_tilt_angle_radians,
-                outer_servo_tilt_angle_radians
-            );
         }
 
         if (now - t0 > 4.0s) {
             // Allocate motor thrust based on the computed torque
-            allocator_->indirect_actuation(
-                0.0f,
-                0.0f,
-                0.0f,
-                0.0f
-            );
+            upwards_motor_thrust_pwm = 0.0f;
+            downwards_motor_thrust_pwm = 0.0f;
         }
+
+        allocator_->indirect_actuation(
+            inner_servo_tilt_angle_radians,
+            outer_servo_tilt_angle_radians,
+            upwards_motor_thrust_pwm,
+            downwards_motor_thrust_pwm
+        );
         return;
     }
 
