@@ -44,7 +44,6 @@ public:
         node->declare_parameter<std::vector<double>>(CONTROLLER_GENERIC_LAMBDA1_PARAM);
         node->declare_parameter<std::vector<double>>(CONTROLLER_GENERIC_LAMBDA2_PARAM);
         node->declare_parameter<std::vector<double>>(CONTROLLER_GENERIC_LAMBDA3_PARAM);
-        
 
         Eigen::Vector3d kp_diag = Eigen::Map<const Eigen::Vector3d>(node->get_parameter(CONTROLLER_GENERIC_KP_PARAM).as_double_array().data(), 3);
         Eigen::Vector3d kv_diag = Eigen::Map<const Eigen::Vector3d>(node->get_parameter(CONTROLLER_GENERIC_KV_PARAM).as_double_array().data(), 3);
@@ -64,7 +63,8 @@ public:
         hr_ = node->get_parameter(CONTROLLER_GENERIC_HR_PARAM).as_double();
         node->declare_parameter<double>(CONTROLLER_GENERIC_KW_PARAM);
         kw_ = node->get_parameter(CONTROLLER_GENERIC_KW_PARAM).as_double();
-
+        node->declare_parameter<double>(CONTROLLER_GENERIC_HW_PARAM);
+        hw_ = node->get_parameter(CONTROLLER_GENERIC_HW_PARAM).as_double();
     }
 
     /*
@@ -74,13 +74,15 @@ public:
     AllocatorInput compute() {
         auto state = state_aggregator_->get_state();
         auto sp = setpoint_aggregator_->get_position_setpoint();
+        auto att_sp = setpoint_aggregator_->get_attitude_setpoint();
 
-        // Map MATLAB variable names to C++
         Eigen::Vector3d pd       = sp.position;        // pd   
         Eigen::Vector3d pd_dot   = sp.velocity;       // pd_dot
         Eigen::Vector3d pd_2dot  = sp.acceleration;   // pd_2dot
         Eigen::Vector3d pd_3dot  = sp.jerk;           // pd_3dot
         Eigen::Vector3d pd_4dot  = sp.snap;           // pd_4dot
+
+        double yaw_sp = att_sp.attitude[2];
 
         Eigen::Vector3d p        = state.position;    // p
         Eigen::Vector3d v        = state.velocity;    // v
@@ -152,14 +154,6 @@ public:
         // use Kp and Kv as inner loop PD controller gains
         // use Lambda1, Lambda2, Lambda3 as outer loop PID gains
 
-        //tvc_cmd = compute_inner_loop(p_c, dp_c, pd35_c, euler_c, omega_c, thd3, psid3, mass, J, ell, g, Kp_, Kv_, kw_, ep_int(0));
-        //tvc_cmd << 0.7*mass*g, 0.0, 0.0; // hover for debug
-
-        // roll control
-        Eigen::Vector3d rolld3;
-        rolld3(0) = 0.0; rolld3(1) = 0.0; rolld3(2) = 0.0;
-        double Mx = 0.0;
-        // Mx= compute_roll_control(euler_c, omega_c, rolld3, J, tvc_cmd, ell, kr_, hr_);
 
         /*
         // pure integrator for Ts = 10 ms
@@ -176,7 +170,18 @@ public:
         Lambda2_2d = Lambda2_.topLeftCorner<2,2>();
         Lambda3_2d = Lambda3_.topLeftCorner<2,2>();
 
-        tvc_cmd = compute_inner_loop(p_c, dp_c, pd35_c, euler_c, omega_c, thd3, psid3, mass, J, ell, g, Kp_, Kv_, kw_, ep_int(0));
+        tvc_cmd = compute_inner_loop(p_c, dp_c, pd35_c, euler_c, omega_c, thd3, psid3, mass, J, ell, g, Kp_, Kv_, kw_, ep_int(0), Mx);
+
+        // roll control
+        Eigen::Vector3d rolld3;
+        rolld3(0) = -yaw_sp; rolld3(1) = 0.0; rolld3(2) = 0.0;
+        double cphid = std::cos(rolld3(0));
+        double sphid = std::sin(rolld3(0));
+        double e_phi = std::atan2((sphi*cphid - cphi*sphid), (cphi*cphid + sphi*sphid));
+        // integrate roll error for roll control
+        roll_int = roll_int + e_phi*dt_;
+        Mx = compute_roll_control(euler_c, omega_c, rolld3, roll_int, J, tvc_cmd, ell, kr_, hr_, hw_);
+
 
         //att_d = compute_outer_loop(p_c, dp_c, euler_c, pd35_c, ep_int, tvc_cmd, mass, Lambda1_2d, Lambda2_2d, Lambda3_2d);
 
@@ -268,11 +273,17 @@ public:
         // --- Map u into your allocator outputs ---
         // NOTE: this mapping is vehicle-specific. The Matlab returned u is [u1 u2 u3]'
 
-        double u3 = 1.0; // dummy yaw input
-        auto attitude_output = attitude_controller_.compute(u3); // <<-- replace with your own yaw controller. u3 does not matter in this case :D
+        // double u3 = 1.0; // dummy yaw input
+        // auto attitude_output = attitude_controller_.compute(u3); // <<-- replace with your own yaw controller. u3 does not matter in this case :D
+
+        double tau_yaw, tau_delta_bar;
+        tau_yaw = Mx* (u(2)/u.norm());
+        tau_delta_bar = tau_yaw/J_axial; 
 
         output_.thrust_vector = u;
-        output_.tau_delta_bar = attitude_output.tau_delta_bar; // <<-- replace with your own yaw controller
+        //output_.tau_delta_bar = attitude_output.tau_delta_bar; // <<-- replace with your own yaw controller
+        output_.tau_delta_bar = tau_delta_bar;
+        
 
         publish_debug();
         return output_;
@@ -308,6 +319,7 @@ private:
     double hr_;
     double kr_;
     double kw_;
+    double hw_;
 
     Eigen::Vector4d euler_c = Eigen::Vector4d::Zero();
     Eigen::Vector3d omega_c = Eigen::Vector3d::Zero();
@@ -316,6 +328,8 @@ private:
     Eigen::Vector3d thd3   = Eigen::Vector3d::Zero();
     Eigen::Vector3d psid3  = Eigen::Vector3d::Zero();
     Eigen::Vector3d ep_int = Eigen::Vector3d::Zero(); // integral of position error
+    double Mx = 0.0;
+    double roll_int = 0.0;
 
     // filter states for derivation
     double u_x_[3] = {0.0,0.0,0.0};
@@ -443,7 +457,7 @@ private:
         Eigen::Vector3d ddp = (R * tvc - g * Eigen::Vector3d(1.0,0.0,0.0)) / m;
         Eigen::Vector3d d3p = R * S * tvc / m;
 
-        Eigen::Vector3d ddeuler = Q * Jinv * (S_ell * tvc) - zeta;
+        Eigen::Vector3d ddeuler = Q * Jinv * (S_ell * tvc + M*tvc/tvc.norm()) - zeta;
         phi_ddot = ddeuler(0);
         
         phi_v = std::atan2(sphi, cphi); // THINK ABOUT THIS DEPARAM !!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -492,7 +506,8 @@ private:
         const Eigen::Matrix3d& kp,
         const Eigen::Matrix3d& kv,
         double ki,
-        double p_int_x)
+        double p_int_x,
+        double Mx)
     {
 
         double cphi = euler(0);
@@ -573,7 +588,7 @@ private:
 
         // zeta
         Eigen::Matrix3d Jinv = J.inverse();
-        Eigen::Vector3d zeta = (Q * Jinv * S * J - dotQ) * omega; // for debug, ignore gyroscopic effects
+        Eigen::Vector3d zeta = (Q * Jinv * S * J - dotQ) * omega; 
 
         // tracking errors
         Eigen::Vector3d xi;
@@ -586,7 +601,7 @@ private:
         Eigen::RowVector3d gi_x = (Eigen::RowVector3d() << 1.0, 0.0, 0.0).finished() * R / mass;
         Eigen::Matrix<double,2,3> E;
         E << 0, 1, 0,
-            0, 0, 1;   // only if you trust << here
+            0, 0, 1;  
 
         Eigen::Matrix<double,2,3> gi_th_psi;
         gi_th_psi = E * Q * Jinv * S_ell;
@@ -601,8 +616,12 @@ private:
         // eta
         Eigen::Vector3d eta;
         eta(0) = g + ddxd;
-        eta(1) = zeta(1) + thd3(2);
-        eta(2) = zeta(2) + psid3(2);
+        
+        // Compute eta_th_psi = [0 1 0; 0 0 1]*(zeta + M*Q*J^(-1)*[-1;0;0]) + [thd3(2); psid3(2)]
+        Eigen::Vector3d M_term = Mx * Q * Jinv * Eigen::Vector3d(-1.0, 0.0, 0.0);
+        Eigen::Vector3d zeta_M = zeta + M_term;
+        eta(1) = zeta_M(1) + thd3(2);
+        eta(2) = zeta_M(2) + psid3(2);
 
         // tvc command
         Eigen::Vector3d tvc;
@@ -612,7 +631,7 @@ private:
     }
 
 
-
+    /*
     Eigen::Vector2d compute_outer_loop(
         const Eigen::Vector3d& p,
         const Eigen::Vector3d& dp,
@@ -687,33 +706,51 @@ private:
         Eigen::Vector2d att_d;
         att_d << thd, psid; // radians, desired pitch and yaw
 
-        /*
         // return dummy references for debug
-        Eigen::Vector2d att_d;
-        att_d << 0.1, 0.2;
-        */
+        //att_d << 0.1, 0.2;
+        
         return att_d;
     }
+    */
+    
 
     double compute_roll_control(
-        const Eigen::Vector3d& euler,
+        const Eigen::Vector4d& euler,
         const Eigen::Vector3d& omega,
         const Eigen::Vector3d& rolld3,
+        double roll_int,
         const Eigen::Matrix3d& J,
         const Eigen::Vector3d& tvc_cmd,
         double ell,
         double kp,
-        double kd
+        double kd,
+        double ki
     ){
-        double phi = euler(0);
-        double th  = euler(1);
-        double psi = euler(2);
+        double cphi = euler(0);
+        double sphi = euler(1);
+        double th   = euler(2);
+        double psi  = euler(3);
 
-        // Q_matrix
+        
+        Eigen::Matrix3d R;
+        R <<
+            std::cos(th)*std::cos(psi),
+            -std::sin(psi),
+            std::cos(psi)*std::sin(th),
+
+            std::sin(th)*sphi + std::cos(th)*cphi*std::sin(psi),
+            cphi*std::cos(psi),
+            cphi*std::sin(th)*std::sin(psi) - std::cos(th)*sphi,
+
+            std::cos(th)*sphi*std::sin(psi) - cphi*std::sin(th),
+            std::cos(psi)*sphi,
+            std::cos(th)*cphi + std::sin(th)*sphi*std::sin(psi);
+
         Eigen::Matrix3d Q;
-        Q.col(0) = Eigen::Vector3d(1.0, 0.0, 0.0);
-        Q.col(1) = Eigen::Vector3d(std::sin(phi)*std::tan(th), std::cos(phi), std::sin(phi)/std::cos(th));
-        Q.col(2) = Eigen::Vector3d(std::cos(phi)*std::tan(th), -std::sin(phi), std::cos(phi)/std::cos(th));
+        Q <<
+            std::cos(th)/std::cos(psi), 0.0, std::sin(th)/std::cos(psi),
+            std::cos(th)*std::tan(psi), 1.0, std::sin(th)*std::tan(psi),
+            -std::sin(th), 0.0, std::cos(th);
 
         Eigen::Vector3d deuler;
         deuler = Q * omega;
@@ -721,27 +758,17 @@ private:
         double dth  = deuler(1);
         double dpsi = deuler(2);
 
-        // Rotation matrix R
-        Eigen::Matrix3d R;
-        R.col(0) = Eigen::Vector3d(std::cos(th)*std::cos(psi),
-            std::cos(th)*std::sin(psi),
-            -std::sin(th));
-        R.col(1) = Eigen::Vector3d(std::sin(phi)*std::sin(th)*std::cos(psi) - std::cos(phi)*std::sin(psi),
-            std::sin(phi)*std::sin(th)*std::sin(psi) + std::cos(phi)*std::cos(psi),
-            std::sin(phi)*std::cos(th));
-        R.col(2) = Eigen::Vector3d(std::cos(phi)*std::sin(th)*std::cos(psi) + std::sin(phi)*std::sin(psi),
-            std::cos(phi)*std::sin(th)*std::sin(psi) - std::sin(phi)*std::cos(psi),
-            std::cos(phi)*std::cos(th));
 
-        // dotQ
         Eigen::Matrix3d dotQ;
-        dotQ.col(0) = Eigen::Vector3d(0.0, 0.0, 0.0);
-        dotQ.col(1) = Eigen::Vector3d(std::cos(phi)*std::tan(th)*dphi + std::sin(phi)/(std::cos(th)*std::cos(th))*dth,
-            -std::sin(phi)*dphi,
-            dphi*std::cos(phi)/std::cos(th) + std::sin(phi)*std::sin(th)/(std::cos(th)*std::cos(th))*dth);
-        dotQ.col(2) = Eigen::Vector3d(-dphi*std::sin(phi)*std::tan(th) + std::cos(phi)/(std::cos(th)*std::cos(th))*dth,
-            -std::cos(phi)*dphi,
-            -dphi*std::sin(phi)/std::cos(th) + std::cos(phi)*std::sin(th)/(std::cos(th)*std::cos(th))*dth);
+        dotQ <<
+            (dpsi*std::cos(th)*std::sin(psi) - dth*std::cos(psi)*std::sin(th))/(std::cos(psi)*std::cos(psi)), 0.0,
+            (dth*std::cos(th)*std::cos(psi) + dpsi*std::sin(th)*std::sin(psi))/(std::cos(psi)*std::cos(psi)),
+
+            (dpsi*std::cos(th) - dth*std::cos(psi)*std::sin(th)*std::sin(psi))/(std::cos(psi)*std::cos(psi)), 0.0,
+            (dpsi*std::sin(th) + dth*std::cos(th)*std::cos(psi)*std::sin(psi))/(std::cos(psi)*std::cos(psi)),
+
+            -dth*std::cos(th), 0.0,
+            -dth*std::sin(th);
 
         double p_rate = omega(0);
         double q_rate = omega(1);
@@ -749,21 +776,20 @@ private:
 
         // S matrix
         Eigen::Matrix3d S;
-        S.setZero();
-        S.col(0) = Eigen::Vector3d(0.0, r_rate, -q_rate);
-        S.col(1) = Eigen::Vector3d(-r_rate, 0.0, p_rate);
-        S.col(2) = Eigen::Vector3d(q_rate, -p_rate, 0.0);
+        S <<
+            0.0,   -r_rate,  q_rate,
+            r_rate, 0.0,    -p_rate,
+        -q_rate, p_rate,  0.0;
 
-        // S_ell
         Eigen::Matrix3d S_ell;
-        S_ell.setZero();
-        S_ell.col(0) = Eigen::Vector3d(0.0, 0.0, 0.0) ;
-        S_ell.col(1) = Eigen::Vector3d(0.0, 0.0, -ell);
-        S_ell.col(2) = Eigen::Vector3d(0.0, ell, 0.0) ;
+        S_ell <<
+            0.0, 0.0, 0.0,
+            0.0, 0.0,  ell,
+            0.0,-ell, 0.0;
 
         // zeta
         Eigen::Matrix3d Jinv = J.inverse();
-        Eigen::Vector3d zeta = (Q * Jinv * S * J - dotQ) * omega;
+        Eigen::Vector3d zeta = (Q * Jinv * S * J - dotQ) * omega; 
 
         double phid   = rolld3(0);
         double dphid  = rolld3(1);
@@ -773,15 +799,19 @@ private:
         row << 1.0, 0.0, 0.0;
 
         double thrust = tvc_cmd.norm();
-        double g, g_inv;
-        g = -(row * (Q * Jinv * S_ell))(0) / thrust;
-        if (std::abs(g) < 1e-6) g_inv = 0.0;
-        else g_inv = 1.0 / g;
+        double g, g_inv, eta;
 
-        double eta;
-        eta = (row* (Q * Jinv * S_ell * tvc_cmd + zeta)) + ddphid;
+        g = (row*Q*Jinv*tvc_cmd/thrust).value();
+        g_inv = 1.0/g;
 
-        double M = g_inv * (-kp*(phi - phid) - kd*(dphi - dphid) + eta);
+        eta = -(row* (Q*Jinv*S_ell*tvc_cmd + zeta)).value() + ddphid;
+
+        double cphid = std::cos(phid);
+        double sphid = std::sin(phid);
+        double e_phi = std::atan2((sphi*cphid - cphi*sphid), (cphi*cphid + sphi*sphid));
+
+        double M = g_inv * (-kp*e_phi - kd*(dphi-dphid) - ki*roll_int + eta);
+
         return M;
     }
 

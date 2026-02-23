@@ -45,10 +45,10 @@
             Lambda_1: [2.0,2.0,0.0] # avf only uses 1st and 2nd element (kp)
             Lambda_2: [1.3,1.3,0.0] # avf only uses 1st and 2nd element (kd)
             Lambda_3: [0.4,0.4,0.0] # avf only uses 1st and 2nd element (ki)
-            kr: 3.0 # avf uses this for cutoff frequency of attitude command filter (wc)
-            hr: 0.7 # avf uses this for damping ratio of attitude command filter (xi)
+            kr: 0.1 # avf uses this for prop gain in roll control
+            hr: 0.0 # avf uses this for derivative gain in roll control
             kw: 1.0 # avf uses this for altitude integrator gain
-            hw: 35.0
+            hw: 0.0 # avf uses this for integrative gain in roll control
           delta: 0.8  
 
 
