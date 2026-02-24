@@ -173,14 +173,13 @@ public:
         tvc_cmd = compute_inner_loop(p_c, dp_c, pd35_c, euler_c, omega_c, thd3, psid3, mass, J, ell, g, Kp_, Kv_, kw_, ep_int(0), Mx);
 
         // roll control
-        Eigen::Vector3d rolld3;
-        rolld3(0) = -yaw_sp; rolld3(1) = 0.0; rolld3(2) = 0.0;
-        double cphid = std::cos(rolld3(0));
-        double sphid = std::sin(rolld3(0));
+        phid3(0) = -yaw_sp; phid3(1) = 0.0; phid3(2) = 0.0;
+        double cphid = std::cos(phid3(0));
+        double sphid = std::sin(phid3(0));
         double e_phi = std::atan2((sphi*cphid - cphi*sphid), (cphi*cphid + sphi*sphid));
         // integrate roll error for roll control
         roll_int = roll_int + e_phi*dt_;
-        Mx = compute_roll_control(euler_c, omega_c, rolld3, roll_int, J, tvc_cmd, ell, kr_, hr_, hw_);
+        Mx = compute_roll_control(euler_c, omega_c, phid3, roll_int, J, tvc_cmd, ell, kr_, hr_, hw_);
 
 
         //att_d = compute_outer_loop(p_c, dp_c, euler_c, pd35_c, ep_int, tvc_cmd, mass, Lambda1_2d, Lambda2_2d, Lambda3_2d);
@@ -325,6 +324,7 @@ private:
     Eigen::Vector3d omega_c = Eigen::Vector3d::Zero();
     Eigen::Vector2d att_d   = Eigen::Vector2d::Zero();
     Eigen::Vector3d tvc_cmd = Eigen::Vector3d::Zero();
+    Eigen::Vector3d phid3  = Eigen::Vector3d::Zero();
     Eigen::Vector3d thd3   = Eigen::Vector3d::Zero();
     Eigen::Vector3d psid3  = Eigen::Vector3d::Zero();
     Eigen::Vector3d ep_int = Eigen::Vector3d::Zero(); // integral of position error
@@ -717,7 +717,7 @@ private:
     double compute_roll_control(
         const Eigen::Vector4d& euler,
         const Eigen::Vector3d& omega,
-        const Eigen::Vector3d& rolld3,
+        const Eigen::Vector3d& phid3,
         double roll_int,
         const Eigen::Matrix3d& J,
         const Eigen::Vector3d& tvc_cmd,
@@ -791,9 +791,9 @@ private:
         Eigen::Matrix3d Jinv = J.inverse();
         Eigen::Vector3d zeta = (Q * Jinv * S * J - dotQ) * omega; 
 
-        double phid   = rolld3(0);
-        double dphid  = rolld3(1);
-        double ddphid = rolld3(2);
+        double phid   = phid3(0);
+        double dphid  = phid3(1);
+        double ddphid = phid3(2);
 
         Eigen::RowVector3d row;
         row << 1.0, 0.0, 0.0;
@@ -859,6 +859,7 @@ private:
         Eigen::Map<Eigen::Vector3d>(msg.thd3.data()) = frame_transforms::radians_to_degrees(thd3);
         Eigen::Map<Eigen::Vector3d>(msg.psid3.data()) = frame_transforms::radians_to_degrees(psid3);
         Eigen::Map<Eigen::Vector3d>(msg.ep_int.data()) = ep_int;
+        Eigen::Map<Eigen::Vector3d>(msg.phid3.data()) = frame_transforms::radians_to_degrees(phid3);
 
         debug_publisher_->publish(msg);
     }
