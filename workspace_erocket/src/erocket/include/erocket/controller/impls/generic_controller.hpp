@@ -170,6 +170,7 @@ public:
         Lambda2_2d = Lambda2_.topLeftCorner<2,2>();
         Lambda3_2d = Lambda3_.topLeftCorner<2,2>();
 
+        double Mx_debug = 0.0; // for debug
         tvc_cmd = compute_inner_loop(p_c, dp_c, pd35_c, euler_c, omega_c, thd3, psid3, mass, J, ell, g, Kp_, Kv_, kw_, ep_int(0), Mx);
 
         // roll control
@@ -362,7 +363,7 @@ private:
         const Eigen::Matrix<double, 3, 5>& pd_3x5, // desired trajectory: pos, vel, acc, jerk, snap
         const Eigen::Vector3d& p_int,              // integral of position error
         const Eigen::Vector3d& tvc,                // thrust vector command
-        double M,                                  // M vector  
+        double Mx,                                 // M vector  
         const Eigen::Vector3d& omega,              // angular rates
         double m,                                  // mass
         double g,                                  // gravity
@@ -457,7 +458,7 @@ private:
         Eigen::Vector3d ddp = (R * tvc - g * Eigen::Vector3d(1.0,0.0,0.0)) / m;
         Eigen::Vector3d d3p = R * S * tvc / m;
 
-        Eigen::Vector3d ddeuler = Q * Jinv * (S_ell * tvc + M*tvc/tvc.norm()) - zeta;
+        Eigen::Vector3d ddeuler = Q * Jinv * (S_ell * tvc + Mx*tvc/tvc.norm()) - zeta;
         phi_ddot = ddeuler(0);
         
         phi_v = std::atan2(sphi, cphi); // THINK ABOUT THIS DEPARAM !!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -848,10 +849,6 @@ private:
         Eigen::Map<Eigen::Vector3d>(msg.acceleration.data()) = state.acceleration;
         Eigen::Map<Eigen::Vector3d>(msg.acceleration_setpoint.data()) = setpoint.acceleration;
 
-        Eigen::Map<Eigen::Vector3d>(msg.ep.data()) = ep;
-        Eigen::Map<Eigen::Vector3d>(msg.ev.data()) = ev;
-        Eigen::Map<Eigen::Vector3d>(msg.er.data()) = er;
-        Eigen::Map<Eigen::Vector3d>(msg.ew.data()) = ew;
         Eigen::Map<Eigen::Vector3d>(msg.u.data()) = u;
 
         Eigen::Map<Eigen::Vector4d>(msg.euler_c.data()) = euler_c;

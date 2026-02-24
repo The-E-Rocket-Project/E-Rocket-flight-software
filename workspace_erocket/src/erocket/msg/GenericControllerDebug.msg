@@ -11,13 +11,6 @@ float64[3] acceleration_setpoint
 
 float64[3] u
 
-# errors
-
-float64[3] ep
-float64[3] ev
-float64[3] er
-float64[3] ew
-
 float64[3] omega_c
 float64[4] euler_c
 float64[3] thd3
